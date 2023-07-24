@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 import json
-import zono.zonocrypt
-import time
 import zono.colorlogger as cl
+import time
 import os
 import sys
 import subprocess
 import argparse 
 
-crypt = zono.zonocrypt.zonocrypt()
 
 
 def get_file(filename):
@@ -43,7 +41,7 @@ def load_languages():
     
     filetypes = {}
     languages = _languages.copy()
-    for lang,info in _languages.items():
+    for info in _languages.values():
         for inf in info['file-types']:
             filetypes[inf] = info
         for alias in info['aliases']:
@@ -128,8 +126,6 @@ def run_cmd(cmd,args):
 
 def compile_file(args,parser,repr=print):
     cmd = get_compiler(args,parser)
-    with open(args.file) as f:
-        file_hash = crypt.hashing_function(f.read(),length=64).decode('utf8')
  
 
     st = time.perf_counter()
@@ -137,7 +133,6 @@ def compile_file(args,parser,repr=print):
         stat = subprocess.run(cmd,check=True,shell=True)
         returncode = stat.returncode
     except subprocess.CalledProcessError as e:
-        print('Error while compiling')
         returncode = e.returncode
         
     except KeyboardInterrupt:
@@ -146,7 +141,7 @@ def compile_file(args,parser,repr=print):
     if returncode == 0:
         with open(get_file('store.json'),'r+') as f:
             store = json.load(f)
-            store[args.file] = file_hash
+            store[args.file] = os.path.getmtime(args.file)
             f.seek(0)
             json.dump(store,f)
             
@@ -168,7 +163,6 @@ def main():
     parser.add_argument("file", help="File path")
     file_opts = parser.add_mutually_exclusive_group()
     file_opts.add_argument("--language", help="Override and use different programming language instead of relying on filetype")
-    # file_opts.add_argument("--command", help="Use a custom command to run the program")
     arg_opts = parser.add_mutually_exclusive_group()
     arg_opts.add_argument("--compiler-args", help="Override and use custom arguments for the compiler",default=None)
     arg_opts.add_argument("-a", "--args", help="Add additional arguments to the compiler",default='')
@@ -226,10 +220,8 @@ def main():
     if args.file not in store:
         log(f'No existing entry for {args.file} treating it as a new file')
         return compile_and_run(args,parser,language,run_args,new=True)
-    with open(args.file) as f:
-        file_hash = crypt.hashing_function(f.read(),length=64).decode('utf8')
 
-    if file_hash != store[args.file]:
+    if os.path.getmtime(args.file) != store[args.file]:
         log(f'Detected changes in {args.file} recompiling the file')
         return compile_and_run(args,parser,language,run_args)
     
