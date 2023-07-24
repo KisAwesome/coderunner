@@ -41,7 +41,8 @@ def load_languages():
     
     filetypes = {}
     languages = _languages.copy()
-    for info in _languages.values():
+    for lang,info in _languages.items():
+        info['name'] = lang
         for inf in info['file-types']:
             filetypes[inf] = info
         for alias in info['aliases']:
@@ -82,7 +83,7 @@ def get_compiler(args,parser):
     language = get_language(args,parser)
 
     if language['compiled'] is not True:
-        parser.error(f'Language: {language["name"]} is not compiled')
+        parser.error(f'Language: {language["name"]} is not a compiled language')
         return
     if args.compiler_args is not None:
         args = args.custom_args
@@ -159,14 +160,13 @@ def main():
         with open(get_file('store.json'),'w') as f:
             json.dump({},f)
     parser = argparse.ArgumentParser(description="A simple command that can run any type of code",prog='run',usage='After + symbol all additional input will be passed in to the runtime of the file')
-
+    
     parser.add_argument("file", help="File path")
     file_opts = parser.add_mutually_exclusive_group()
     file_opts.add_argument("--language", help="Override and use different programming language instead of relying on filetype")
     arg_opts = parser.add_mutually_exclusive_group()
     arg_opts.add_argument("--compiler-args", help="Override and use custom arguments for the compiler",default=None)
-    arg_opts.add_argument("-a", "--args", help="Add additional arguments to the compiler",default='')
-    
+    arg_opts.add_argument("-a", "--args", help="Add additional arguments to the compiler",default='')    
     mut_opts = parser.add_mutually_exclusive_group()
     mut_opts.add_argument("--compile", action="store_true", help="Just compile the program without running it")
     mut_opts.add_argument("--run", action="store_true", help="Run the program without checking for changes")
