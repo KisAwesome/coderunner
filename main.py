@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-import json
 import zono.colorlogger as cl
+import subprocess
+import argparse 
+import json
 import time
 import os
 import sys
-import subprocess
-import argparse 
 
 
 
@@ -71,6 +71,9 @@ def get_language(args,parser):
     
     else:
         file_type = file_sp[1]
+        if file_type == '' and  os.access(file_path, os.X_OK):
+            return languages['executable']
+           
         language = filetypes.get(file_type,None)
         if language is None:
             parser.error(f'Language {file_type} does not exist')

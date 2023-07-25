@@ -62,5 +62,13 @@
     "run-command": "sh {file_path}",
     "file-types": [".sh"],
     "aliases": []
+  },
+  "executable": {
+    "compiled": false,
+    "compiler-command": null,
+    "default-args": "",
+    "run-command": "{file_path}",
+    "file-types": [],
+    "aliases": []
   }
 }
