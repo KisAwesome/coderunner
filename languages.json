@@ -2,7 +2,7 @@
   "c": {
     "compiled": true,
     "compiler-command": "gcc {file_output}",
-    "default-args": " -std=c17",
+    "default-args": "-std=c17",
     "run-command": "{output_file}",
     "file-types": [".c"],
     "aliases": []
@@ -42,7 +42,7 @@
   "c++": {
     "compiled": true,
     "compiler-command": "g++ {file_output}",
-    "default-args": " -std=c++20",
+    "default-args": "-std=c++20",
     "run-command": "{output_file}",
     "file-types": [".cpp"],
     "aliases": ["cpp"]
@@ -69,6 +69,14 @@
     "default-args": "",
     "run-command": "{file_path}",
     "file-types": [],
+    "aliases": []
+  },
+  "brainfuck": {
+    "compiled": false,
+    "compiler-command": null,
+    "default-args": "",
+    "run-command": "python3 /Users/kareem/Documents/dev/Python/Apps/brainfuck_compiler/main.py {file_path}",
+    "file-types": [".bf"],
     "aliases": []
   }
 }

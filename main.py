@@ -41,7 +41,7 @@ def log(message, *args, func=cl.log, **kwargs):
 
 def form_language(language):
     if language.startswith("."):
-        return language
+        return language.replace(".", "", 1)
     return "." + language
 
 
@@ -99,13 +99,14 @@ def get_compiler(args, parser):
         parser.error(f'Language: {language["name"]} is not a compiled language')
         return
     if args.compiler_args is not None:
-        args = args.custom_args
+        args = args.compiler_args
     else:
         args = language["default-args"] + " " + args.args
 
     output_path = create_output_file(file_path)
-
-    return wrap_command(language["compiler-command"], file_path, output_path) + args
+    return (
+        wrap_command(language["compiler-command"], file_path, output_path) + " " + args
+    )
 
 
 def compile_and_run(args, parser, language, run_args, new=False):
@@ -138,12 +139,13 @@ def run_cmd(cmd, args):
         cl.error(
             f"Error while running {args.file} process returned code: {e.returncode} in {et:.4}s"
         )
-        sys.exit()
+        return False
     except KeyboardInterrupt:
-        sys.exit()
+        return False
     else:
         et = time.perf_counter() - st
         print(f"Ran {args.file} returned status code {returncode} in {et:.4f}s")
+        return True
 
 
 def compile_file(args, parser, repr=print):
@@ -157,7 +159,7 @@ def compile_file(args, parser, repr=print):
         returncode = e.returncode
 
     except KeyboardInterrupt:
-        sys.exit()
+        return False
     et = time.perf_counter() - st
     if returncode == 0:
         with open(get_file("store.json"), "r+") as f:
@@ -173,18 +175,21 @@ def compile_file(args, parser, repr=print):
         return False
 
 
-def main():
+def compiler_args_type(arg_string):
+    # Treat the entire argument string after "--compiler-args" as a single argument
+    return [arg_string]
+
+
+def parse_args():
     global VERBOSE
-    if not os.path.exists(get_file("store.json")):
-        with open(get_file("store.json"), "w") as f:
-            json.dump({}, f)
+
     parser = argparse.ArgumentParser(
         description="A simple command that can run any type of code",
         prog="run",
         usage="After + symbol all additional input will be passed in to the runtime of the file",
     )
 
-    parser.add_argument("file", help="File path")
+    parser.add_argument("file", help="Path to input file")
     file_opts = parser.add_mutually_exclusive_group()
     file_opts.add_argument(
         "--language",
@@ -228,7 +233,15 @@ def main():
     args.file = get_full_file_path(args.file)
     if not os.path.exists(args.file):
         return parser.error(f"File {args.inputfile} does not exist")
+    return args, parser, run_args
 
+
+def main():
+    if not os.path.exists(get_file("store.json")):
+        with open(get_file("store.json"), "w") as f:
+            json.dump({}, f)
+
+    args, parser, run_args = parse_args()
     if args.compile:
         return compile_file(args, parser)
     elif args.run:
