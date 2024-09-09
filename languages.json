@@ -1,7 +1,7 @@
 {
   "c": {
     "compiled": true,
-    "compiler-command": "gcc {file_output}",
+    "compiler-command": "gcc {file_path} -o {output_file}",
     "default-args": "-std=c17",
     "run-command": "{output_file}",
     "file-types": [".c"],
@@ -9,7 +9,7 @@
   },
   "rust": {
     "compiled": true,
-    "compiler-command": "rustc {file_output}",
+    "compiler-command": "rustc {file_path} -o {output_file}",
     "default-args": "",
     "run-command": "{output_file}",
     "file-types": [".rs"],
@@ -19,7 +19,7 @@
     "compiled": false,
     "compiler-command": null,
     "default-args": "",
-    "run-command": "python3 {file_path}",
+    "run-command": "{python_path} {file_path}",
     "file-types": [".py"],
     "aliases": ["py"]
   },
@@ -41,7 +41,7 @@
   },
   "c++": {
     "compiled": true,
-    "compiler-command": "g++ {file_output}",
+    "compiler-command": "g++ {file_path} -o {output_file}",
     "default-args": "-std=c++20",
     "run-command": "{output_file}",
     "file-types": [".cpp"],
@@ -78,5 +78,29 @@
     "run-command": "python3 /Users/kareem/Documents/dev/Python/Apps/brainfuck_compiler/main.py {file_path}",
     "file-types": [".bf"],
     "aliases": []
+  },
+  "java": {
+    "compiled": true,
+    "compiler-command": "cd {dir_path} ; javac {file_path};echo Place holder file for run command > {file_name_no_ext}",
+    "default-args": "",
+    "run-command": "cd {dir_path} ; java {file_name_no_ext} {OUTPUT}",
+    "file-types": [".java"],
+    "aliases": []
+  },
+  "zsh": {
+    "compiled": false,
+    "file-types": [],
+    "run-command": "{python_path} -c \"import os;file = open('{file_path}') ;os.system(file.read());file.close()\""
+  },
+  "go":{
+    "compiled": true,
+    "compiler-command":"go build {file_path}",
+    "default-args": "",
+    "run-command": "{output_file}",
+    "file-types": [
+        ".go"
+      ],
+      "aliases": []
+    
   }
 }

@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 import zono.colorlogger as cl
+import parser_utils
 import subprocess
 import argparse
+import logging
 import json
 import time
 import os
 import sys
+
+
+logger = cl.create_logger("main", level=20)
+
+FLAGS = ["{OUTPUT}"]
+INPUT_SEPARATOR = "+"
 
 
 def get_file(filename):
@@ -18,12 +26,26 @@ def create_output_file(path):
     )
 
 
+def wrap_quote(inp):
+    return f'"{inp}"'
+
+
 def wrap_command(command, file_path, output_path):
-    return (
-        command.replace("{file_output}", f"{file_path} -o {output_path}")
-        .replace("{file_path}", file_path)
-        .replace("{output_file}", output_path)
+    command = (
+        command.replace(
+            "{input_file_output}",
+            f"{wrap_quote(file_path)} -o {wrap_quote(output_path)}",
+        )
+        .replace("{file_path}", wrap_quote(file_path))
+        .replace("{output_file}", wrap_quote(output_path))
+        .replace("{dir_path}", wrap_quote(os.path.dirname(file_path)))
+        .replace("{file_name}", os.path.basename(file_path))
+        .replace("{file_name_no_ext}", os.path.splitext(os.path.basename(file_path))[0])
+        .replace("{python_path}", wrap_quote(sys.executable))
     )
+    for flag in FLAGS:
+        command = command.replace(flag, "")
+    return command
 
 
 def get_full_file_path(file_path):
@@ -31,12 +53,6 @@ def get_full_file_path(file_path):
         return file_path
     else:
         return os.path.abspath(file_path)
-
-
-def log(message, *args, func=cl.log, **kwargs):
-    global VERBOSE
-    if VERBOSE:
-        func(message, *args, **kwargs)
 
 
 def form_language(language):
@@ -55,7 +71,7 @@ def load_languages():
         info["name"] = lang
         for inf in info["file-types"]:
             filetypes[inf] = info
-        for alias in info["aliases"]:
+        for alias in info.get("aliases", []):
             languages[alias] = info
 
     return languages, filetypes
@@ -75,8 +91,7 @@ def get_language(args, parser):
             args.language, full_dict.get(form_language(args.language))
         )
         if language is None:
-            parser.error(f"Language {args.language} does not exist")
-            return
+            return parser.error(f"Unsupported language with type {args.language}")
 
     else:
         file_type = file_sp[1]
@@ -85,8 +100,9 @@ def get_language(args, parser):
 
         language = filetypes.get(file_type, None)
         if language is None:
-            parser.error(f"Language {file_type} does not exist")
-            return
+            return parser.error(
+                f"Unknown file type. To support additional languages, please update the 'languages.json' file"
+            )
 
     return language
 
@@ -96,12 +112,11 @@ def get_compiler(args, parser):
     language = get_language(args, parser)
 
     if language["compiled"] is not True:
-        parser.error(f'Language: {language["name"]} is not a compiled language')
-        return
+        return parser.error(f'Language: {language["name"]} is not a compiled language')
     if args.compiler_args is not None:
         args = args.compiler_args
     else:
-        args = language["default-args"] + " " + args.args
+        args = language.get("default-args", "") + " " + args.args
 
     output_path = create_output_file(file_path)
     return (
@@ -109,17 +124,21 @@ def get_compiler(args, parser):
     )
 
 
-def compile_and_run(args, parser, language, run_args, new=False):
+def compile_and_run(args, parser, language, run_args, new=False, save=True):
     file_path = args.file
     output_file = create_output_file(file_path)
     if new is False:
-        log(f"Compiling {os.path.basename(file_path)} due to changes found in file")
-    else:
-        log(
+        logger.info(
+            f"Compiling {os.path.basename(file_path)} due to changes found in file"
+        )
+    elif new is True:
+        logger.info(
             f"Compiling {os.path.basename(file_path)} because there is no existing executable"
         )
+    else:
+        logger.info(f"Compiling {os.path.basename(file_path)}")
 
-    if compile_file(args, parser, log):
+    if compile_file(args, parser):
         cmd = (
             wrap_command(language["run-command"], args.file, output_file)
             + " "
@@ -136,21 +155,22 @@ def run_cmd(cmd, args):
         returncode = stat.returncode
     except subprocess.CalledProcessError as e:
         et = time.perf_counter() - st
-        cl.error(
-            f"Error while running {args.file} process returned code: {e.returncode} in {et:.4}s"
+        logger.error(
+            f"Error while running {args.file} process returned code: {e.returncode} in {et:.4}s",
         )
         return False
     except KeyboardInterrupt:
         return False
     else:
         et = time.perf_counter() - st
-        print(f"Ran {args.file} returned status code {returncode} in {et:.4f}s")
+        logger.print(
+            f"Ran {args.file} returned status code {returncode} in {et:.4f}s",
+        )
         return True
 
 
-def compile_file(args, parser, repr=print):
+def compile_file(args, parser, save=True):
     cmd = get_compiler(args, parser)
-
     st = time.perf_counter()
     try:
         stat = subprocess.run(cmd, check=True, shell=True)
@@ -162,39 +182,45 @@ def compile_file(args, parser, repr=print):
         return False
     et = time.perf_counter() - st
     if returncode == 0:
-        with open(get_file("store.json"), "r+") as f:
-            store = json.load(f)
-            store[args.file] = os.path.getmtime(args.file)
-            f.seek(0)
-            json.dump(store, f)
+        if save:
+            with open(get_file("store.json"), "r") as f:
+                store = json.load(f)
+                store[args.file] = os.path.getmtime(args.file)
+            with open(get_file("store.json"), "w") as f:
+                json.dump(store, f)
 
-        repr(f"Compiled {args.file} with status code {returncode} in {et:.2f}s")
+        logger.important_log(
+            f"Compiled {args.file} with status code {returncode} in {et:.2f}s"
+        )
         return True
     else:
-        cl.error(f"Error while compiling {args.file} returned status code {returncode}")
+        logger.critical(
+            f"Error while compiling {args.file} returned status code {returncode}"
+        )
         return False
 
 
-def compiler_args_type(arg_string):
-    # Treat the entire argument string after "--compiler-args" as a single argument
-    return [arg_string]
-
-
 def parse_args():
-    global VERBOSE
-
     parser = argparse.ArgumentParser(
         description="A simple command that can run any type of code",
         prog="run",
-        usage="After + symbol all additional input will be passed in to the runtime of the file",
+        # usage=f"After {INPUT_SEPARATOR} symbol all additional input will be passed in to the runtime of the file",
     )
 
     parser.add_argument("file", help="Path to input file")
+
+    parser.add_argument(
+        "--run-command",
+        help="Run a line of code with selected language",
+        default=None,
+        action=parser_utils.RunCommandAction,
+    )
     file_opts = parser.add_mutually_exclusive_group()
     file_opts.add_argument(
         "--language",
         help="Override and use different programming language instead of relying on filetype",
     )
+
     arg_opts = parser.add_mutually_exclusive_group()
     arg_opts.add_argument(
         "--compiler-args",
@@ -215,20 +241,38 @@ def parse_args():
         action="store_true",
         help="Run the program without checking for changes",
     )
-    parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Turns on verbose output"
+    mut_opts.add_argument(
+        "--compile-run",
+        action="store_true",
+        help="Compile the program without checking for changes and then run the program",
     )
-
-    if "+" in sys.argv:
-        ind = sys.argv.index("+")
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Increase verbosity level (up to 2 times)",
+    )
+    if INPUT_SEPARATOR in sys.argv:
+        ind = sys.argv.index(INPUT_SEPARATOR)
         run_args = sys.argv[ind + 1 :]
         sys.argv = sys.argv[:ind]
     else:
         run_args = []
     args = parser.parse_args()
-    run_args = " ".join(run_args)
+    verbosity = min(2, args.verbose)
+    log_levels = [
+        logging.CRITICAL,
+        logging.INFO,
+        logging.DEBUG,
+    ]
+    log_level = log_levels[verbosity]
+    logger.setLevel(log_level)
 
-    VERBOSE = args.verbose
+    run_args = " ".join(run_args)
+    if args.run_command is not None:
+        args.file = __file__
+
     args.inputfile = args.file
     args.file = get_full_file_path(args.file)
     if not os.path.exists(args.file):
@@ -236,18 +280,50 @@ def parse_args():
     return args, parser, run_args
 
 
+def get_script_from_input():
+    script = ""
+    while True:
+        inp = sys.stdin.readline()
+        if not inp:
+            break
+        script += "\n"
+        script += inp
+    return script
+
+
 def main():
     if not os.path.exists(get_file("store.json")):
         with open(get_file("store.json"), "w") as f:
             json.dump({}, f)
-
+    temp = False
     args, parser, run_args = parse_args()
+    if args.run_command is not None:
+        temp = True
+        script = args.run_command
+        if args.run_command is True:
+            script = get_script_from_input()
+        language = get_language(args, parser)
+        filetype = ""
+        if language["file-types"]:
+            filetype = language["file-types"][0]
+
+        file = get_file(f".temp/tempcode{filetype}")
+        if not os.path.exists(os.path.dirname(file)):
+            os.mkdir(os.path.dirname(file))
+        with open(file, "w") as f:
+            f.write(script)
+
+        args.file = file
+        args.input_file = os.path.basename(file)
     if args.compile:
         return compile_file(args, parser)
     elif args.run:
         language = get_language(args, parser)
         output_path = ""
-        if "{output_file}" in language["run-command"]:
+        if (
+            "{output_file}" in language["run-command"]
+            or "{OUTPUT}" in language["run-command"]
+        ):
             output_path = create_output_file(args.file)
             if not os.path.exists(output_path):
                 return parser.error(f"No existing binary for {args.file}")
@@ -258,27 +334,31 @@ def main():
             + run_args
         )
         return run_cmd(cmd, args)
+    elif args.compile_run:
+        return compile_and_run(args, parser, get_language(args, parser), run_args, 0)
 
     language = get_language(args, parser)
     if language["compiled"] is not True:
-        log("Language is not compiled running interpreter...")
+        logger.debug("Language is not compiled running interpreter...")
         cmd = wrap_command(language["run-command"], args.file, "") + " " + run_args
         return run_cmd(cmd, args)
 
     output_path = create_output_file(args.file)
     if not os.path.exists(output_path):
-        log(f"No existing binary for {args.file} creating a new one")
+        logger.debug(f"No existing binary for {args.file} creating a new one")
         return compile_and_run(args, parser, language, run_args, new=True)
 
     with open(get_file("store.json"), "r") as f:
         store = json.load(f)
 
     if args.file not in store:
-        log(f"No existing entry for {args.file} treating it as a new file")
-        return compile_and_run(args, parser, language, run_args, new=True)
+        logger.debug(f"No existing entry for {args.file} treating it as a new file")
+        return compile_and_run(
+            args, parser, language, run_args, new=True, save=not temp
+        )
 
     if os.path.getmtime(args.file) != store[args.file]:
-        log(f"Detected changes in {args.file} recompiling the file")
+        logger.debug(f"Detected changes in {args.file} recompiling the file")
         return compile_and_run(args, parser, language, run_args)
 
     cmd = wrap_command(language["run-command"], args.file, output_path) + " " + run_args
