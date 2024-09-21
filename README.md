@@ -36,6 +36,8 @@ Options
 
 -v, --verbose: Enable verbose output for more detailed information.
 
+-info: outputs information about the selected files language
+
 ### Additional Arguments
 
 After the + symbol in the command, you can provide additional arguments that will be passed to the runtime of the file being executed. These arguments will not be considered as options for the script.
