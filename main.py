@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 import zono.colorlogger as cl
-import parser_utils
 import subprocess
 import argparse
 import logging
+import pprint
 import json
 import time
 import os
@@ -14,6 +14,12 @@ logger = cl.create_logger("main", level=20)
 
 FLAGS = ["{OUTPUT}"]
 INPUT_SEPARATOR = "+"
+
+try:
+    import parser_utils
+except ImportError:
+    logger.error("Unable to load required files: parser_utils.py")
+    sys.exit(1)
 
 
 def get_file(filename):
@@ -26,12 +32,28 @@ def create_output_file(path):
     )
 
 
+def fmt_language_info(language):
+    return (
+        pprint.pformat(language)
+        .replace(",", "")
+        .replace("{", "")
+        .replace("}", "")
+        .replace(":", " :")
+    )
+
+
+def output_language_info(language):
+    info = fmt_language_info(language)
+    for i in info.split("\n"):
+        print(i.strip().replace("'", "", 2))
+
+
 def wrap_quote(inp):
     return f'"{inp}"'
 
 
 def get_compiler_name(cmd):
-    return cmd.split(' ')[0]
+    return cmd.split(" ")[0]
 
 
 def wrap_command(command, file_path, output_path):
@@ -66,8 +88,15 @@ def form_language(language):
 
 
 def load_languages():
+    if not os.path.exists(get_file("languages.json")):
+        logger.error("Could not find languages.json info file")
+        sys.exit(1)
     with open(get_file("languages.json"), "r") as f:
-        _languages = json.load(f)
+        try:
+            _languages = json.load(f)
+        except json.JSONDecodeError:
+            logger.error("Could not read languages.json file: invalid json")
+            sys.exit(1)
 
     filetypes = {}
     languages = _languages.copy()
@@ -106,13 +135,15 @@ def get_language(args, parser):
             return parser.error(
                 f"Unknown file type. To support additional languages, please update the 'languages.json' file"
             )
-    if language['compiled']:
-        language['compiler-name'] = language.get('compiler-name',get_compiler_name(language.get('compiler-command')))
+    if language["compiled"]:
+        language["compiler-name"] = language.get(
+            "compiler-name", get_compiler_name(language.get("compiler-command"))
+        )
     logger.info(f"Detected {language['name']}")
     return language
 
 
-def get_compiler(args, parser,language=None):
+def get_compiler(args, parser, language=None):
     file_path = args.file
     language = language or get_language(args, parser)
 
@@ -141,9 +172,11 @@ def compile_and_run(args, parser, language, run_args, new=False, save=True):
             f"Compiling {os.path.basename(file_path)} using {language['compiler-name']} because there is no existing executable"
         )
     else:
-        logger.info(f"Compiling {os.path.basename(file_path)} using {language['compiler-name']}")
+        logger.info(
+            f"Compiling {os.path.basename(file_path)} using {language['compiler-name']}"
+        )
 
-    if compile_file(args, parser,language=language):
+    if compile_file(args, parser, language=language):
         cmd = (
             wrap_command(language["run-command"], args.file, output_file)
             + " "
@@ -174,8 +207,8 @@ def run_cmd(cmd, args):
         return True
 
 
-def compile_file(args, parser, save=True,language=None):
-    cmd = get_compiler(args, parser,language)
+def compile_file(args, parser, save=True, language=None):
+    cmd = get_compiler(args, parser, language)
     st = time.perf_counter()
     try:
         stat = subprocess.run(cmd, check=True, shell=True)
@@ -205,7 +238,7 @@ def compile_file(args, parser, save=True,language=None):
         return False
 
 
-def parse_args():
+def create_parser():
     parser = argparse.ArgumentParser(
         description="A simple command that can run any type of code",
         prog="run",
@@ -251,6 +284,11 @@ def parse_args():
         action="store_true",
         help="Compile the program without checking for changes and then run the program",
     )
+    mut_opts.add_argument(
+        "-info",
+        action="store_true",
+        help="Prints information about the selected programming language",
+    )
     parser.add_argument(
         "-v",
         "--verbose",
@@ -258,6 +296,11 @@ def parse_args():
         default=0,
         help="Increase verbosity level (up to 2 times)",
     )
+    return parser
+
+
+def parse_args():
+    parser = create_parser()
     if INPUT_SEPARATOR in sys.argv:
         ind = sys.argv.index(INPUT_SEPARATOR)
         run_args = sys.argv[ind + 1 :]
@@ -302,6 +345,10 @@ def main():
             json.dump({}, f)
     temp = False
     args, parser, run_args = parse_args()
+    if args.info:
+        language = get_language(args, parser)
+        return output_language_info(language)
+        
     if args.run_command is not None:
         temp = True
         script = args.run_command
