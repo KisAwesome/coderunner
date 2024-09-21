@@ -30,6 +30,10 @@ def wrap_quote(inp):
     return f'"{inp}"'
 
 
+def get_compiler_name(cmd):
+    return cmd.split(' ')[0]
+
+
 def wrap_command(command, file_path, output_path):
     command = (
         command.replace(
@@ -73,7 +77,6 @@ def load_languages():
             filetypes[inf] = info
         for alias in info.get("aliases", []):
             languages[alias] = info
-
     return languages, filetypes
 
 
@@ -103,13 +106,15 @@ def get_language(args, parser):
             return parser.error(
                 f"Unknown file type. To support additional languages, please update the 'languages.json' file"
             )
-
+    if language['compiled']:
+        language['compiler-name'] = language.get('compiler-name',get_compiler_name(language.get('compiler-command')))
+    logger.info(f"Detected {language['name']}")
     return language
 
 
-def get_compiler(args, parser):
+def get_compiler(args, parser,language=None):
     file_path = args.file
-    language = get_language(args, parser)
+    language = language or get_language(args, parser)
 
     if language["compiled"] is not True:
         return parser.error(f'Language: {language["name"]} is not a compiled language')
@@ -129,16 +134,16 @@ def compile_and_run(args, parser, language, run_args, new=False, save=True):
     output_file = create_output_file(file_path)
     if new is False:
         logger.info(
-            f"Compiling {os.path.basename(file_path)} due to changes found in file"
+            f"Compiling {os.path.basename(file_path)} using {language['compiler-name']} due to changes found in file"
         )
     elif new is True:
         logger.info(
-            f"Compiling {os.path.basename(file_path)} because there is no existing executable"
+            f"Compiling {os.path.basename(file_path)} using {language['compiler-name']} because there is no existing executable"
         )
     else:
-        logger.info(f"Compiling {os.path.basename(file_path)}")
+        logger.info(f"Compiling {os.path.basename(file_path)} using {language['compiler-name']}")
 
-    if compile_file(args, parser):
+    if compile_file(args, parser,language=language):
         cmd = (
             wrap_command(language["run-command"], args.file, output_file)
             + " "
@@ -169,8 +174,8 @@ def run_cmd(cmd, args):
         return True
 
 
-def compile_file(args, parser, save=True):
-    cmd = get_compiler(args, parser)
+def compile_file(args, parser, save=True,language=None):
+    cmd = get_compiler(args, parser,language)
     st = time.perf_counter()
     try:
         stat = subprocess.run(cmd, check=True, shell=True)

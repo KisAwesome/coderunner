@@ -85,7 +85,8 @@
     "default-args": "",
     "run-command": "cd {dir_path} ; java {file_name_no_ext} {OUTPUT}",
     "file-types": [".java"],
-    "aliases": []
+    "aliases": [],
+    "compiler-name": "javac"
   },
   "zsh": {
     "compiled": false,
